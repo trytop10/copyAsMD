@@ -1,0 +1,17 @@
+# Node modules (only used when fetching vendored libraries)
+STORE_LISTING.md
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/

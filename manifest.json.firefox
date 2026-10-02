@@ -1,0 +1,44 @@
+{
+  "manifest_version": 2,
+  "name": "Copy as Markdown",
+  "version": "2.0.0",
+  "description": "Right-click selected text to copy as Markdown format, or export it as a PDF",
+  
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "storage",
+    "<all_urls>"
+  ],
+  
+  "background": {
+    "scripts": ["background.js"]
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "vendor/turndown.js",
+        "vendor/turndown-plugin-gfm.js",
+        "content.js"
+      ]
+    }
+  ],
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "copyAsMarkdown@fxdq.net",
+      "data_collection_permissions": {
+        "description": "This extension does not collect any personal user data. Anonymous, non-personal usage statistics are collected solely for the purpose of improving extension functionality and are not shared with any third parties.",
+        "allow_reporting": false,
+        "required": ["none"],
+        "optional": []
+      }
+    }
+  },
+  
+  "icons": {
+    "48": "48.png"
+  }
+}

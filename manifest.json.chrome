@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Copy as Markdown",
+  "version": "2.0.0",
+  "description": "Right-click selected text to copy as Markdown format, or export it as a PDF",
+  
+  "permissions": [
+    "contextMenus",
+    "storage",
+    "scripting"
+  ],
+  
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "vendor/turndown.js",
+        "vendor/turndown-plugin-gfm.js",
+        "content.js"
+      ]
+    }
+  ],
+  
+  "icons": {
+    "48": "48.png",
+    "128": "128.png"
+  }
+}
+
