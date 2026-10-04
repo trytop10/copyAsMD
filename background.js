@@ -34,6 +34,32 @@ function trySendMessage(tabId, message) {
   return sendMessageToTab(tabId, message).catch(() => undefined);
 }
 
+// Ask for the active tab of the current window.
+function queryActiveTab() {
+  if (isPromiseApi) {
+    return browserAPI.tabs.query({ active: true, currentWindow: true });
+  }
+  return new Promise((resolve) => {
+    browserAPI.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs || []);
+    });
+  });
+}
+
+// The tab the menu was opened on is normally passed to the context-menu click
+// handler. Firefox can hand over `null` when the event is delivered while the
+// background script is still starting up, and Chrome can pass a placeholder
+// whose id is unusable. Fall back to the active tab in both cases so the
+// action still has a target to talk to.
+async function resolveTab(tab) {
+  if (tab && typeof tab.id === 'number' && tab.id >= 0) {
+    return tab;
+  }
+
+  const tabs = await queryActiveTab();
+  return tabs && tabs.length ? tabs[0] : null;
+}
+
 // Inject the content script into a tab that does not have it yet, for example
 // a tab that was already open when the extension was installed or reloaded.
 function injectContentScript(tabId) {
@@ -120,11 +146,12 @@ browserAPI.contextMenus.onClicked.addListener((info, tab) => {
 // content script never answers this message, so only delivery is checked.
 async function copySelectionAsMarkdown(tab) {
   try {
-    if (!await ensureContentScript(tab.id)) {
+    const target = await resolveTab(tab);
+    if (!target || !await ensureContentScript(target.id)) {
       console.warn('Copy as Markdown is not available on this page.');
       return;
     }
-    await trySendMessage(tab.id, { action: "convertToMarkdown" });
+    await trySendMessage(target.id, { action: "convertToMarkdown" });
   } catch (err) {
     console.error('Failed to copy selection:', err.message);
   }
@@ -134,12 +161,13 @@ async function copySelectionAsMarkdown(tab) {
 // in a new tab.
 async function exportSelectionAsPdf(tab) {
   try {
-    if (!await ensureContentScript(tab.id)) {
+    const target = await resolveTab(tab);
+    if (!target || !await ensureContentScript(target.id)) {
       console.warn('Export as PDF is not available on this page.');
       return;
     }
 
-    const response = await trySendMessage(tab.id, { action: "getSelection" });
+    const response = await trySendMessage(target.id, { action: "getSelection" });
     if (!response || !response.markdown) {
       console.warn('Nothing selected to export.');
       return;

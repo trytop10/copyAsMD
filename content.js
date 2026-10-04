@@ -4,43 +4,72 @@
 // page that already runs an older copy of it.
 var browserAPI = typeof browser !== 'undefined' ? browser : chrome;
 
+// The content script's global object. In Chrome `globalThis === window`, but in
+// Firefox content scripts `window`/`self` refer to the page window while the
+// globals declared by content scripts (including the top-level `var`s in the
+// other files loaded alongside this one) live on the sandbox global reachable
+// via `globalThis`. Reading the libraries through this reference is what keeps
+// the script working in both browsers.
+var contentGlobal = typeof globalThis !== 'undefined' ? globalThis : window;
+
 // A freshly injected copy registers itself as the active instance so it can
 // take over from a stale copy that outlived an extension reload.
 var copyAsMarkdownInstance = {};
-window.__copyAsMarkdownInstance = copyAsMarkdownInstance;
+contentGlobal.__copyAsMarkdownInstance = copyAsMarkdownInstance;
 
-// Third-party libraries loaded before this script via the manifest.
-// They expose plain globals on the shared isolated-world window object.
-var Turndown = window.TurndownService;
-var gfmPlugin = window.turndownPluginGfm;
+// Third-party libraries loaded before this script via the manifest or the
+// on-demand injection. Read them from the content script global (see above).
+var Turndown = contentGlobal.TurndownService;
+var gfmPlugin = contentGlobal.turndownPluginGfm;
 
 // Create a Turndown service whose output style matches the extension's
 // previous hand-written converter as closely as possible.
-var turndownService = new Turndown({
-  headingStyle: 'atx',
-  bulletListMarker: '-',
-  codeBlockStyle: 'fenced',
-  fence: '```',
-  emDelimiter: '*',
-  strongDelimiter: '**',
-  linkStyle: 'inlined',
-  hr: '---'
-});
-
-// GitHub Flavored Markdown support: tables, strikethrough and task lists.
-turndownService.use(gfmPlugin.gfm);
-
-// Drop elements that only carry scripting or styling information.
-turndownService.remove(['script', 'style', 'noscript']);
-
-// The gfm plugin emits a single tilde, but GitHub (and most renderers)
-// require the double-tilde form, so override that rule.
-turndownService.addRule('strikethroughWithDoubleTilde', {
-  filter: ['del', 's', 'strike'],
-  replacement: function (content) {
-    return '~~' + content + '~~';
+//
+// If the vendor libraries are missing, a stub is returned instead of throwing:
+// that way the rest of this file (most importantly the message listener) still
+// initializes and can report the real problem, rather than dying on load and
+// forcing background.js to re-inject on every single click.
+function createTurndownService() {
+  if (typeof Turndown !== 'function' || !gfmPlugin || typeof gfmPlugin.gfm !== 'function') {
+    var missingLibrary = new Error('The Turndown libraries were not loaded in this page');
+    return {
+      use: function () { return this; },
+      remove: function () { return this; },
+      addRule: function () { return this; },
+      turndown: function () { throw missingLibrary; }
+    };
   }
-});
+
+  var service = new Turndown({
+    headingStyle: 'atx',
+    bulletListMarker: '-',
+    codeBlockStyle: 'fenced',
+    fence: '```',
+    emDelimiter: '*',
+    strongDelimiter: '**',
+    linkStyle: 'inlined',
+    hr: '---'
+  });
+
+  // GitHub Flavored Markdown support: tables, strikethrough and task lists.
+  service.use(gfmPlugin.gfm);
+
+  // Drop elements that only carry scripting or styling information.
+  service.remove(['script', 'style', 'noscript']);
+
+  // The gfm plugin emits a single tilde, but GitHub (and most renderers)
+  // require the double-tilde form, so override that rule.
+  service.addRule('strikethroughWithDoubleTilde', {
+    filter: ['del', 's', 'strike'],
+    replacement: function (content) {
+      return '~~' + content + '~~';
+    }
+  });
+
+  return service;
+}
+
+var turndownService = createTurndownService();
 
 // Resolve a possibly relative URL against the document the selection came
 // from so the generated Markdown stays usable outside of the page.
@@ -182,7 +211,7 @@ function copyToClipboard(text) {
 (function (instance) {
   browserAPI.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Ignore every message once a newer instance has taken over.
-    if (window.__copyAsMarkdownInstance !== instance) {
+    if (contentGlobal.__copyAsMarkdownInstance !== instance) {
       return;
     }
 

@@ -1,5 +1,6 @@
 # Node modules (only used when fetching vendored libraries)
 STORE_LISTING.md
+manifest.json
 node_modules/
 
 # Build output
